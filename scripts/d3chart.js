@@ -9,7 +9,9 @@ class Chart {
             marginRight: 25,
             marginLeft: 45,
             container: "body",
+            firstDraw: true,
             defaultTextFill: "#2C3E50",
+            duration: 800,
             title: 'Evaluation against success indicator',
             xAxisTitle: 'Stage of implementation',
             data: null
@@ -58,11 +60,64 @@ class Chart {
         this.calculateProperties();
         this.drawSvgAndWrappers();
         this.drawAxes();
+        this.drawCircles();
+
+
+        this.setState({ firstDraw: false })
+    }
+
+    drawCircles() {
+        const { chart, tip, data, xScale, yScale, duration, firstDraw } = this.getState();
+        const circlesWrap = chart.patternify({ tag: 'g', selector: 'circles-wrapper' });
+
+
+        const circlesStroke = circlesWrap.patternify({ tag: 'circle', selector: 'each-circle-stroke', data: data.points })
+            .attr('cursor', 'pointer')
+            .attr('fill', d => d.stroke || 'rgba(249, 188, 38, 0.6)')
+            .on('mouseenter', (event, d) => {
+                tip.show(event, d);
+            })
+            .on('mouseleave', (event, d) => {
+                tip.hide();
+            })
+
+        if (firstDraw) {
+            circlesStroke
+                .attr('cx', d => xScale(0))
+                .attr('cy', d => yScale(0))
+        }
+
+        circlesStroke.transition()
+            .duration(duration)
+            .delay((d, i, arr) => duration * i / arr.length)
+            .attr('cx', d => xScale(d.x))
+            .attr('cy', d => yScale(d.y))
+            .attr('r', 18)
+
+        const circlesFill = circlesWrap.patternify({ tag: 'circle', selector: 'each-circle-fill', data: data.points })
+            .attr('fill', d => d.fill || 'white')
+            .attr('pointer-events', 'none')
+
+        if (firstDraw) {
+            circlesFill
+                .attr('cx', d => xScale(0))
+                .attr('cy', d => yScale(0))
+        }
+
+
+        circlesFill
+            .transition()
+            .duration(duration)
+            .delay((d, i, arr) => duration * i / arr.length)
+            .attr('cx', d => xScale(d.x))
+            .attr('cy', d => yScale(d.y))
+            .attr('r', 7.5)
     }
 
     drawAxes() {
         const {
             chart,
+            labelsWrap,
             xAxisTitle,
             title,
             calc: { chartWidth, chartHeight }
@@ -114,12 +169,13 @@ class Chart {
             .attr('x', d => d.x)
             .attr('y', d => d.y)
 
-        axisWrapper.patternify({ tag: 'text', selector: 'text-rect-item', data: overlayRects })
+        labelsWrap.patternify({ tag: 'text', selector: 'text-rect-item', data: overlayRects })
             .text(d => d.name)
             .attr('fill', 'rgba(255, 255, 255, 1)')
             .attr('font-weight', 'bold')
             .attr('x', d => d.textX)
             .attr('y', d => d.textY)
+            .attr('pointer-events', 'none')
             .attr('text-anchor', d => d.anchor)
 
         chart.patternify({ tag: 'text', selector: 'title' })
@@ -133,6 +189,8 @@ class Chart {
             .attr('fill', 'rgba(255, 255, 255, 1)')
             .attr('y', chartHeight + 50)
             .attr('x', chartWidth / 2)
+
+        this.setState({ xAxis, yAxis, xScale, yScale })
 
     }
 
@@ -163,6 +221,20 @@ class Chart {
             .attr("width", svgWidth)
             .attr("height", svgHeight)
 
+        const tip = d3.tip().attr('class', 'd3-tip')
+            .direction('w')
+            .offset([0, -10])
+            .html((EVENT, d) => `
+              <div style="min-width:190px;font-size:12px">
+                 <div style="color:rgba(29, 211, 167, 1);font-weight:bold;font-size:16px"> Country</div>
+                 <div style="margin:8px auto;background-color:rgba(255, 255, 255, 0.5);width:100%;height:1px"></div>
+                 <div style="font-weight:bold;font-size:13px;margin-bottom:0px">Overall Score</div>
+                 <div><span>Evaluation:</span> <span style="font-size:10px;color:rgba(29, 211, 167, 1)">  <span style="font-size:12px;font-weight:bold">53</span> /100 </span></div>
+                 <div><span>Stage of implementation:</span>   <span style="font-size:10px;color:rgba(29, 211, 167, 1)">  <span style="font-size:12px;font-weight:bold">53</span> /100 </span> </div>
+              </div>
+          `);
+        svg.call(tip)
+
         //Add container g element
         var chart = svg
             .patternify({
@@ -174,7 +246,17 @@ class Chart {
                 "translate(" + calc.chartLeftMargin + "," + calc.chartTopMargin + ")"
             );
 
-        this.setState({ chart, svg })
+        var labelsWrap = svg
+            .patternify({
+                tag: "g",
+                selector: "labels-wrap"
+            })
+            .attr(
+                "transform",
+                "translate(" + calc.chartLeftMargin + "," + calc.chartTopMargin + ")"
+            );
+
+        this.setState({ chart, svg, labelsWrap, tip })
     }
 
     calculateProperties() {
